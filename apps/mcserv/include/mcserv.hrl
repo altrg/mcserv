@@ -1,5 +1,11 @@
--compile([{parse_transform, lager_transform}]).
+-define(HTTP_PATH, "/").
+-define(HTTP_ACCEPTORS, 5).
 
+-define(HEADER_SIZE, 5). % packet header size (position placeholder), bytes
+
+-define(BUFFER_SIZE, 512*1024). % file read_ahead buffer size
+
+-compile([{parse_transform, lager_transform}]).
 -define(LOG(Level, Text), lager:Level(Text)).
 -define(LOG(Level, Text, Params), lager:Level(Text, Params)).
 

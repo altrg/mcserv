@@ -1,4 +1,4 @@
-%%% @doc This sends packets to multicast group
+%%% @doc This module sends packets to the multicast group
 %%% Config:
 %%%   mcast_address - mutlicast address, ip tuple
 %%%   mcast_port    - mutlicast port, integer
