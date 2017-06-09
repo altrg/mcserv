@@ -35,15 +35,15 @@ start() ->
 %%====================================================================
 init(Req0, Opts) ->
     #{get := Get} = cowboy_req:match_qs([{get, [], undefined}], Req0),
-    #{name := FileName, size := FileSize, pos := CurPos,
+    #{name := FileName, size := FileSize, pos := CurPos, md5 := MD5,
       fd := FD} = mcserv_generator:get_file_info(),
     Peer = cowboy_req:peer(Req0),
     Req = case Get == undefined orelse (catch binary_to_integer(Get)) of
               true ->
                   ?LOG(info, "HTTP info request from peer=~p", [Peer]),
-                  Body = io_lib:format("name=~s~nsize=~b~npos=~b~n"
+                  Body = io_lib:format("name=~s~nsize=~b~nmd5=~s~npos=~b~n"
                                        "mcast_address=~p~nmcast_port=~b~n",
-                                       [FileName, FileSize, CurPos,
+                                       [FileName, FileSize, MD5, CurPos,
                                         ?CFG(mcast_address, ""), ?CFG(mcast_port, 0)]),
                   cowboy_req:reply(200, #{<<"content-type">> => <<"text/plain">>}, Body, Req0);
               GetPos when GetPos >= 0 andalso GetPos =< FileSize ->

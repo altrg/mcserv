@@ -19,8 +19,10 @@
 -type file_info() :: #{path := list(),
                        name := list(),
                        size := pos_integer(),
+                       md5  := binary(),
                        pos  := non_neg_integer(),
                        fd   := file:io_device()}.
+
 -export_type([file_info/0]).
 
 -record(state, {packet_size :: pos_integer(),
@@ -94,5 +96,18 @@ open_file(Path) ->
     #{path => Path,
       name => filename:basename(Path),
       size => filelib:file_size(Path),
+      md5 => calc_md5(Path),
       pos => 0,
       fd => FD}.
+
+%% @doc Calculate md5 hex checksum for file
+calc_md5(Path) ->
+    {ok, FD} = file:open(Path, [read]),
+    calc_md5(FD, erlang:md5_init()).
+calc_md5(FD, Context) ->
+    case file:pread(FD, cur, ?BUFFER_SIZE) of
+        {ok, Data} -> calc_md5(FD, erlang:md5_update(Context, Data));
+        eof ->
+            file:close(FD),
+            list_to_binary([io_lib:format("~2.16.0b", [B]) || <<B>> <= erlang:md5_final(Context)])
+    end.
