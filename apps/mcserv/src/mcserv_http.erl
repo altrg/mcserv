@@ -2,6 +2,7 @@
 %%% Config:
 %%%   http_port - positive integer port to listen
 %%%   file_path   - path to file, string (list)
+%%%   packet_size - generated packet size
 %%%   mcast_address - mutlicast address, ip tuple
 %%%   mcast_port    - mutlicast port, integer
 %%% @end
@@ -34,26 +35,36 @@ start() ->
 %% cowboy_handler callbacks
 %%====================================================================
 init(Req0, Opts) ->
+    {PeerIP, PeerPort} = cowboy_req:peer(Req0),
+    Peer = io_lib:format("~s:~b", [inet:ntoa(PeerIP), PeerPort]),
     #{get := Get} = cowboy_req:match_qs([{get, [], undefined}], Req0),
-    #{name := FileName, size := FileSize, pos := CurPos, md5 := MD5,
-      fd := FD} = mcserv_generator:get_file_info(),
-    Peer = cowboy_req:peer(Req0),
+    File = mcserv_generator:get_file_info(),
     Req = case Get == undefined orelse (catch binary_to_integer(Get)) of
               true ->
-                  ?LOG(info, "HTTP info request from peer=~p", [Peer]),
-                  Body = io_lib:format("name=~s~nsize=~b~nmd5=~s~npos=~b~n"
-                                       "mcast_address=~p~nmcast_port=~b~n",
-                                       [FileName, FileSize, MD5, CurPos,
-                                        ?CFG(mcast_address, ""), ?CFG(mcast_port, 0)]),
+                  ?LOG(info, "HTTP info request from ~s", [Peer]),
+                  Body = io_lib:format("name=~s~n"
+                                       "size=~b~n"
+                                       "md5=~s~n"
+                                       "pos=~b~n"
+                                       "data_size=~b~n"
+                                       "mcast_address=~s~n"
+                                       "mcast_port=~b~n",
+                                       [File#file_info.name,
+                                        File#file_info.size,
+                                        File#file_info.md5,
+                                        File#file_info.pos,
+                                        ?CFG(packet_size, undefined) - ?HEADER_SIZE,
+                                        inet:ntoa(?CFG(mcast_address, undefined)),
+                                        ?CFG(mcast_port, undefined)]),
                   cowboy_req:reply(200, #{<<"content-type">> => <<"text/plain">>}, Body, Req0);
-              GetPos when GetPos >= 0 andalso GetPos =< FileSize ->
-                  ?LOG(info, "HTTP chunk pos=~b request from peer=~p", [GetPos, Peer]),
-                  ChunkSize = ?CFG(packet_size, undefined) - ?HEADER_SIZE,
-                  {ok, Data} = file:pread(FD, GetPos, ChunkSize),
+              GetPos when GetPos >= 0 andalso GetPos =< File#file_info.size ->
+                  ?LOG(info, "HTTP data pos=~b request from ~s", [GetPos, Peer]),
+                  DataSize = ?CFG(packet_size, undefined) - ?HEADER_SIZE,
+                  {ok, Data} = file:pread(File#file_info.pos, GetPos, DataSize),
                   cowboy_req:reply(200, #{<<"content-type">> => <<"application/octet-stream">>},
                                    Data, Req0);
               _ ->
-                  ?LOG(info, "HTTP invalid chunk pos=~s request from peer=~p", [Get, Peer]),
+                  ?LOG(info, "HTTP invalid data pos=~s request from ~s", [Get, Peer]),
                   cowboy_req:reply(404, Req0)
           end,
     {ok, Req, Opts}.

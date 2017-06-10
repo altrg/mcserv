@@ -10,3 +10,11 @@
 -define(LOG(Level, Text, Params), lager:Level(Text, Params)).
 
 -define(CFG(Key, Default), application:get_env(mcserv, Key, Default)).
+
+-record(file_info, {path :: string(),
+                    name :: string(),
+                    size :: pos_integer(),
+                    md5  :: binary(),
+                    pos  :: non_neg_integer(),
+                    fd   :: file:io_device()
+                   }).
