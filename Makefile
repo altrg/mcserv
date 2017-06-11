@@ -1,23 +1,14 @@
 REBAR = $(shell pwd)/rebar3
 
-.PHONY: all deps compile rel run prod
+.PHONY: server client run
 
-all: deps compile rel
+all: server client
 
-deps:
-	$(REBAR) deps
+server:
+	$(REBAR) as server release
 
-compile:
-	$(REBAR) compile
-
-rel:
-	$(REBAR) release
+client:
+	$(REBAR) as client escriptize
 
 run:
-	$(shell pwd)/_build/default/rel/mcserv/bin/mcserv console
-
-rel:
-	$(REBAR) release
-
-prod:
-	$(REBAR) as prod tar
+	$(shell pwd)/_build/server/rel/mcserv/bin/mcserv console

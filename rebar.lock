@@ -5,7 +5,7 @@
   0},
  {<<"cowlib">>,
   {git,"https://github.com/ninenines/cowlib",
-       {ref,"20f1ec02b0b1b4727b2c6e96a3b04e4785ff3228"}},
+       {ref,"a636afd8ccb8258fbf24f7ae1d44d174b66cc95b"}},
   1},
  {<<"goldrush">>,{pkg,<<"goldrush">>,<<"0.1.9">>},1},
  {<<"lager">>,
