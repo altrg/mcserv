@@ -69,7 +69,7 @@ handle_info(tick, State) ->
     Pos1 = case file:pread(FD, Pos, DataSize) of % @TODO check perfomance
                {ok, Data} -> Pos;
                eof ->
-                   ?LOG(debug, "EOF, rewinding file"),
+                   ?LOG(info, "EOF, rewinding file"),
                    {ok, Data} = file:pread(FD, 0, DataSize),
                    0
            end,

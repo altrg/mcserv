@@ -35,7 +35,6 @@ start_link(Meta) ->
 init([Meta]) ->
     Url = ?CFG(url, undefined),
     Timeout = ?CFG(timeout, 5000),
-    ?LOG("Corrector started: timeout=~bms~n", [Timeout]),
     self() ! wait_first_packet,
     {ok, #state{meta=Meta,
                 url=Url,
@@ -48,13 +47,14 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info(wait_first_packet, State) ->
-    %% wait for the first packet to start corrector
     case ets:next(?TAB_RECEIVED, 0) of
         '$end_of_table' ->
             self() ! wait_first_packet, % @TODO check if need delay
             {noreply, State};
         Pos ->
+            ?LOG("Corrector started: pos=~b timeout=~b~n", [Pos, State#state.timeout]),
             RefTS = erlang:monotonic_time(millisecond),
+            self() ! tick,
             {noreply, State#state{pos=Pos,
                                   ref_ts=RefTS}}
     end;
@@ -73,11 +73,11 @@ handle_info(tick, State) ->
                  _ when CurrentTS < RefTS + Timeout -> % no timeout, wait
                      State;
                  [{Pos}] -> % timeout occured
-                     ?LOG("Timeout pos=~b, downloading via http~n", [Pos]),
+                     ?LOG("** Timeout pos=~b, downloading~n", [Pos]),
                    case download_data(State#state.url, Pos) of
                        {error, Err} ->
                            ?LOG("Error downloading pos=~b: ~p~n", [Pos, Err]),
-                           State; % retry at the next tick, @TODO delay
+                           State; % retry at the next tick, @TODO delay?
                        {ok, Data} ->
                            mcclient_assembler:process_data(Pos, Data),
                            Pos1 = get_next_pos(Pos),
