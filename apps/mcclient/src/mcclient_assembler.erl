@@ -8,14 +8,11 @@
 -include("mcclient.hrl").
 
 %% API
--export([start_link/1, process_packet/1]).
+-export([start_link/1, process_data/2]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
-
--define(TAB_DATA, mclient_assembler_data).
--define(TAB_INFO, mclient_assembler_info).
 
 -record(state, {meta     :: #metadata{},
                 filename :: binary(),
@@ -32,17 +29,14 @@
 start_link(Meta) ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [Meta], []).
 
-%% @doc Process incoming packet
-%% @TODO integrity checking
--spec process_packet(binary()) -> true | {error, term()}.
-process_packet(Packet) ->
-    case Packet of
-        <<Pos:?HEADER_SIZE/little-unsigned-integer-unit:8, Data/binary>> ->
-            case ets:lookup(?TAB_INFO, Pos) of
-                [{Pos, todo}] -> ets:insert(?TAB_DATA, {Pos, Data});
-                _ -> true
-            end;
-        _ -> {error, invalid_packet}
+%% @doc Process incoming data
+-spec process_data(non_neg_integer(), binary()) -> true | {error, term()}.
+process_data(Pos, Data) ->
+    case ets:lookup(?TAB_PENDING, Pos) of
+        [{Pos}] ->
+            ets:delete(?TAB_PENDING, Pos),
+            ets:insert(?TAB_RECEIVED, {Pos, Data});
+        _ -> true
     end.
 
 %%====================================================================
@@ -55,15 +49,15 @@ init([Meta]) ->
             ?LOG("Can't create '~s': ~p~n", [Filename, Err]),
             init:stop(); % hard but escript compatible :)
         {ok, FD} ->
-            ets:new(?TAB_DATA, [ordered_set, public, named_table]),
-            ets:new(?TAB_INFO, [ordered_set, named_table]),
-            init_info_table(Meta),
+            ets:new(?TAB_RECEIVED, [ordered_set, public, named_table]),
+            ets:new(?TAB_PENDING, [ordered_set, public, named_table]),
+            init_pending_table(Meta),
             ?LOG("Assembler started: filename='~s'~n", [Filename]),
             self() ! tick,
             {ok, #state{meta=Meta,
                         filename=Filename,
                         fd=FD,
-                        key=Meta#metadata.position,
+                        key=0,
                         written=0}}
     end.
 
@@ -79,11 +73,11 @@ handle_info(tick, State) when State#state.key == '$end_of_table' ->
     if State#state.written < Meta#metadata.size -> handle_info(tick, State#state{key=0});
        true ->
             file:close(State#state.fd),
-            case calc_md5(Filename) == Meta#metadata.md5 of
+            case calculate_md5(Filename) == Meta#metadata.md5 of
                 false ->
                     {ok, FD} = open_file(Filename),
                     ?LOG("Invalid file checksum, retrying!~n"),
-                    init_info_table(Meta),
+                    init_pending_table(Meta),
                     handle_info(tick, State#state{fd=FD,
                                                   key=0,
                                                   written=0});
@@ -98,22 +92,21 @@ handle_info(tick, State) ->
            fd=FD,
            key=Key,
            written=Written} = State,
-    Written1 = case ets:lookup(?TAB_DATA, Key) of
+    Written1 = case ets:lookup(?TAB_RECEIVED, Key) of
                    [{Pos, Data}] ->
                        case file:pwrite(FD, Pos, Data) of
                            {error, Err} ->
                                ?LOG("Can't write to file: ~p~n", [Err]),
                                Written;
                            ok ->
-                               ets:delete(?TAB_DATA, Pos),
-                               ets:delete(?TAB_INFO, Pos),
+                               ets:delete(?TAB_RECEIVED, Pos),
                                Sum = Written + size(Data),
                                ?LOG("~b/~b written~n", [Sum, Meta#metadata.size]),
                                Sum
                        end;
                    _ -> Written
                end,
-    Key1 = ets:next(?TAB_DATA, Key),
+    Key1 = ets:next(?TAB_RECEIVED, Key),
     self() ! tick, % @TODO check if need delay
     {noreply, State#state{key=Key1, written=Written1}}.
 
@@ -130,19 +123,19 @@ code_change(_OldVsn, State, _Extra) ->
 open_file(Filename) ->
     file:open(Filename, [write, binary, {delayed_write, ?BUFFER_SIZE, ?DELAY}]).
 
-%% @doc (Re)initialize assembler info table
-init_info_table(Meta) ->
-    DataSize = Meta#metadata.data_size,
-    [ets:insert(?TAB_INFO, {Key * DataSize, todo}) ||
-        Key <- lists:seq(0, trunc(Meta#metadata.size / DataSize))].
+%% @doc (Re)initialize pending positions table
+init_pending_table(Meta) ->
+    DataSize = Meta#metadata.packet_size - ?HEADER_SIZE,
+    NumOfPackets = round(Meta#metadata.size / DataSize + 0.5),
+    [ets:insert(?TAB_PENDING, {Key * DataSize}) || Key <- lists:seq(0, NumOfPackets - 1)].
 
 %% @doc Calculate md5 hex checksum for file
-calc_md5(Path) ->
+calculate_md5(Path) ->
     {ok, FD} = file:open(Path, [read]),
-    calc_md5(FD, erlang:md5_init()).
-calc_md5(FD, Context) ->
+    calculate_md5(FD, erlang:md5_init()).
+calculate_md5(FD, Context) ->
     case file:pread(FD, cur, ?BUFFER_SIZE) of
-        {ok, Data} -> calc_md5(FD, erlang:md5_update(Context, Data));
+        {ok, Data} -> calculate_md5(FD, erlang:md5_update(Context, Data));
         eof ->
             file:close(FD),
             list_to_binary([io_lib:format("~2.16.0b", [B]) || <<B>> <= erlang:md5_final(Context)])

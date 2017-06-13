@@ -56,10 +56,15 @@ parse_metadata([<<"pos=", Pos0/binary>>| Lines], Res) ->
         {ok, Pos} when Pos >= 0 -> parse_metadata(Lines, Res#metadata{position=Pos});
         _ -> {error, "Can't parse pos"}
     end;
-parse_metadata([<<"data_size=", PSize0/binary>>| Lines], Res) ->
-    case to_int(PSize0) of
-        {ok, Size} when Size >= 0 -> parse_metadata(Lines, Res#metadata{data_size=Size});
-        _ -> {error, "Can't parse data size"}
+parse_metadata([<<"packet_size=", Size0/binary>>| Lines], Res) ->
+    case to_int(Size0) of
+        {ok, Size} when Size >= 0 -> parse_metadata(Lines, Res#metadata{packet_size=Size});
+        _ -> {error, "Can't parse packet size"}
+    end;
+parse_metadata([<<"rate=", Rate0/binary>>| Lines], Res) ->
+    case to_int(Rate0) of
+        {ok, Rate} when Rate >= 0 -> parse_metadata(Lines, Res#metadata{rate=Rate});
+        _ -> {error, "Can't parse rate"}
     end;
 parse_metadata([<<"mcast_address=", Addr0/binary>>| Lines], Res) ->
     case inet:parse_address(binary_to_list(Addr0)) of

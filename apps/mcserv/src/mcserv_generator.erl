@@ -92,7 +92,7 @@ open_file(Path) ->
     case filelib:file_size(Path) of
         0 -> {error, empty_file};
         Size ->
-            case file:open(Path, [read, raw, binary, {read_ahead, ?BUFFER_SIZE}]) of
+            case file:open(Path, [read, binary, {read_ahead, ?BUFFER_SIZE}]) of
                 {error, Err} -> {error, Err};
                 {ok, FD} -> {ok, #file_info{path=Path,
                                             name=filename:basename(Path),

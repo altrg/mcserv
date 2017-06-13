@@ -12,7 +12,8 @@
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
          terminate/2, code_change/3]).
 
--record(state, {socket  :: gen_udp:socket()
+-record(state, {meta   :: #metadata{},
+                socket :: gen_udp:socket()
                }).
 
 %%====================================================================
@@ -31,7 +32,8 @@ init([Meta]) ->
                                 [{add_membership, {Meta#metadata.address, {0,0,0,0}}},
                                  {active, once}, binary]),
     ?LOG("Receiver  started: port=~b~n", [Meta#metadata.port]),
-    {ok, #state{socket=Socket}}.
+    {ok, #state{meta=Meta,
+                socket=Socket}}.
 
 handle_call(_Req, _From, State) ->
     {reply, ok, State}.
@@ -40,7 +42,13 @@ handle_cast(_Msg, State) ->
     {noreply, State}.
 
 handle_info({udp, Socket, _IP, _InPortNo, Packet}, State) ->
-    mcclient_assembler:process_packet(Packet),
+    Meta = State#state.meta,
+    case Packet of
+        <<Pos:?HEADER_SIZE/little-unsigned-integer-unit:8, Data/binary>>
+          when Pos >= 0 andalso Pos < Meta#metadata.size -> % @TODO more integrity checks
+            mcclient_assembler:process_data(Pos, Data);
+        _ -> ok % skip invalid packet
+    end,
     inet:setopts(Socket, [{active, once}]),
     {noreply, State};
 

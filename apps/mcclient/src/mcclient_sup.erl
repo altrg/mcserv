@@ -11,13 +11,13 @@
 %% Supervisor callbacks
 -export([init/1]).
 
--define(SERVER, ?MODULE).
+-define(WORKER(Mod, Args), {Mod, {Mod, start_link, Args}, permanent, 5000, worker, [Mod]}).
 
 %%====================================================================
 %% API functions
 %%====================o===============================================
 start_link(Meta) ->
-    supervisor:start_link({local, ?SERVER}, ?MODULE, [Meta]).
+    supervisor:start_link({local, ?MODULE}, ?MODULE, [Meta]).
 
 %%====================================================================
 %% Supervisor callbacks
@@ -25,10 +25,9 @@ start_link(Meta) ->
 %% Child :: {Id,StartFunc,Restart,Shutdown,Type,Modules}
 init([Meta]) ->
     {ok, {{one_for_one, 5, 10}, [
-                                 {mcclient_assembler, {mcclient_assembler, start_link, [Meta]},
-                                  permanent, 5000, worker, [mcclient_assembler]},
-                                 {mcclient_receiver, {mcclient_receiver, start_link, [Meta]},
-                                  permanent, 5000, worker, [mcclient_receiver]}
+                                 ?WORKER(mcclient_assembler, [Meta]),
+                                 ?WORKER(mcclient_receiver, [Meta]),
+                                 ?WORKER(mcclient_corrector, [Meta])
                                 ]}}.
 
 %%====================================================================
